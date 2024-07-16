@@ -1,0 +1,3 @@
+xarg-python >= 1.5.1
+ipytv
+m3u8
