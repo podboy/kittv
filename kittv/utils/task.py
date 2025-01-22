@@ -5,13 +5,13 @@ from queue import Queue
 from typing import List
 from typing import Optional
 
-from xarg import task_pool
+from xkits import TaskPool
 
 from .stream import IPTVStream
 from .tuning import Tunes
 
 
-class playlist_task(task_pool):
+class PlaylistTask(TaskPool):
     def __init__(self, probe: bool = False, filter: bool = False):
         super().__init__(workers=1, prefix="merge_task")
         self.__streams: Queue[IPTVStream] = Queue()
@@ -70,7 +70,7 @@ class playlist_task(task_pool):
 
     def list(self, playlists: List[str], workers: int = 64,
              output: Optional[str] = None):
-        with task_pool(workers=workers, prefix="check_task") as checker:
+        with TaskPool(workers=workers, prefix="check_task") as checker:
             for playlist in playlists:
                 tune = Tunes.load(playlist)
                 for stream in tune.streams:

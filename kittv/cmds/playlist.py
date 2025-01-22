@@ -3,12 +3,12 @@
 from typing import List
 from typing import Optional
 
-from xarg import add_command
-from xarg import argp
-from xarg import commands
-from xarg import run_command
+from xkits import add_command
+from xkits import argp
+from xkits import commands
+from xkits import run_command
 
-from ..utils.task import playlist_task
+from ..utils.task import PlaylistTask
 
 
 @add_command("playlist", help="list streams")
@@ -29,7 +29,7 @@ def add_cmd_playlist(_arg: argp):
 def run_cmd_playlist(cmds: commands) -> int:
     probe: bool = cmds.args.probe
     filter: bool = cmds.args.filter
-    with playlist_task(probe=probe, filter=filter) as tasker:
+    with PlaylistTask(probe=probe, filter=filter) as tasker:
         workers: int = cmds.args.workers or 1
         output: Optional[str] = cmds.args.output
         playlists: List[str] = cmds.args.playlists
