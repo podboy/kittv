@@ -8,7 +8,7 @@ from xkits import argp
 from xkits import commands
 from xkits import run_command
 
-from ..utils.task import PlaylistTask
+from ..utils import PlaylistTask
 
 
 @add_command("playlist", help="list streams")

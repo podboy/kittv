@@ -5,7 +5,7 @@ from xkits import argp
 from xkits import commands
 from xkits import run_command
 
-from ..utils.stream import StreamProber
+from ..utils import StreamProber
 
 
 @add_command("probe", help="probe stream availability")
