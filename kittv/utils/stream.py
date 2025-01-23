@@ -1,6 +1,5 @@
 # coding:utf-8
 
-from time import time
 from typing import Any
 from typing import Dict
 from typing import Optional
@@ -10,10 +9,11 @@ from ffmpeg import probe as ffprobe
 from ipytv.playlist import IPTVAttr
 from ipytv.playlist import IPTVChannel
 import requests
+from xkits import CacheAtom
 
 
-class StreamProber:
-    PERIOD = 300.0
+class StreamProber(CacheAtom[Dict[str, Any]]):
+    PERIOD = 300
 
     class Format:
         def __init__(self, data: Dict[str, Any]):
@@ -24,22 +24,13 @@ class StreamProber:
             return self.__data["probe_score"]
 
     def __init__(self, data: Optional[Dict[str, Any]] = None):
-        self.__timestamp: float = time()
+        super().__init__(data=data or {}, lifetime=self.PERIOD)
+        self.__format: StreamProber.Format = self.Format(self.data.get("format", {}))  # noqa:E501
         self.__success: bool = data is not None
-        self.__data: Dict[str, Any] = data or {}
-        self.__format: StreamProber.Format = self.Format(self.__data.get("format", {}))  # noqa:E501
 
     @property
     def success(self) -> bool:
         return self.__success
-
-    @property
-    def deltatime(self) -> float:
-        return time() - self.__timestamp
-
-    @property
-    def expired(self) -> bool:
-        return self.deltatime > self.PERIOD
 
     @property
     def format(self) -> Format:
