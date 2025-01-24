@@ -78,7 +78,7 @@ class IPTV_ORG_CATEGORIES(IPTV_ORG_M3U):
             cate.append(item["id"])
             name.append(item["name"])
         self.__categories = dict(zip(cate, name))
-        self.update_index(cate)
+        self.update_index(i.lower() for i in cate)
 
 
 class IPTV_ORG_LANGUAGES(IPTV_ORG_M3U):
@@ -123,7 +123,7 @@ class IPTV_ORG_COUNTRIES(IPTV_ORG_M3U):
             code.append(item["code"])
             tuples.append(self.NAMEDTUPLE(name=item["name"], languages=item["languages"]))  # noqa:E501
         self.__countries = dict(zip(code, tuples))
-        self.update_index(code)
+        self.update_index(i.lower() for i in code)
 
 
 class IPTV_ORG_REGIONS(IPTV_ORG_M3U):
@@ -146,12 +146,12 @@ class IPTV_ORG_REGIONS(IPTV_ORG_M3U):
             code.append(item["code"])
             tuples.append(self.NAMEDTUPLE(name=item["name"], countries=item["countries"]))  # noqa:E501
         self.__regions = dict(zip(code, tuples))
-        self.update_index(code)
+        self.update_index(i.lower() for i in code)
 
 
-class IPTV_ORG_SUBDIVISIONS(IPTV_ORG_DATABASE):
+class IPTV_ORG_SUBDIVISIONS(IPTV_ORG_M3U):
     SUBDIVISIONS_URL = "https://iptv-org.github.io/iptv/subdivisions"
-    NAMEDTUPLE = namedtuple('subdivision', ["name", "code"])
+    NAMEDTUPLE = namedtuple('subdivision', ["name", "country"])
 
     def __init__(self):
         super().__init__(url=self.SUBDIVISIONS_URL)
@@ -164,12 +164,12 @@ class IPTV_ORG_SUBDIVISIONS(IPTV_ORG_DATABASE):
     def update(self, items: List[Dict[str, str]]):
         # noqa:E501, like: [{'country': 'AD', 'name': 'Andorra la Vella', 'code': 'AD-07'}, ...]
         tuples: List[IPTV_ORG_SUBDIVISIONS.NAMEDTUPLE] = []
-        country: List[str] = []
+        code: List[str] = []
         for item in items:
-            country.append(item["country"])
-            tuples.append(self.NAMEDTUPLE(name=item["name"], code=item["code"]))  # noqa:E501
-        self.__subdivisions = dict(zip(country, tuples))
-        self.update_index(country)
+            code.append(item["country"])
+            tuples.append(self.NAMEDTUPLE(name=item["name"], country=item["country"]))  # noqa:E501
+        self.__subdivisions = dict(zip(code, tuples))
+        self.update_index(i.lower() for i in code)
 
 
 class IPTV_ORG_BLOCKLIST(IPTV_ORG_DATABASE):
