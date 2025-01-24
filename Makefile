@@ -4,10 +4,10 @@ all: build install test
 
 
 clean-cover:
-	rm -rf cover .coverage
-clean-tox: clean-cover
+	rm -rf cover .coverage coverage.xml htmlcov
+clean-tox:
 	rm -rf .stestr .tox
-clean: build-clean test-clean clean-tox
+clean: build-clean test-clean clean-cover clean-tox
 
 
 upload:
@@ -30,14 +30,14 @@ reinstall: uninstall install
 
 
 test-prepare:
-	pip3 install --upgrade mock pylint flake8 pytest
+	pip3 install --upgrade mock pylint flake8 pytest pytest-cov
 pylint:
 	pylint $(shell git ls-files kittv/*.py test/*.py example/*.py)
 flake8:
 	flake8 kittv --count --select=E9,F63,F7,F82 --show-source --statistics
 	flake8 kittv --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 pytest:
-	pytest
+	pytest --cov=kittv --cov-report=term-missing --cov-report=xml --cov-report=html --cov-config=.coveragerc --cov-fail-under=100
 pytest-clean:
 	rm -rf .pytest_cache
 test: test-prepare pylint flake8 pytest
