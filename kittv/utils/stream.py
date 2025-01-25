@@ -2,18 +2,18 @@
 
 from typing import Any
 from typing import Dict
+from typing import Iterator
 from typing import Optional
 
 from ffmpeg import Error as fferror
 from ffmpeg import probe as ffprobe
 from ipytv.playlist import IPTVAttr
 from ipytv.playlist import IPTVChannel
-import requests
-from xkits import CacheTimeout
-from xkits import NamedCache
+from xkits import CacheAtom
+from xkits import singleton
 
 
-class StreamProber(NamedCache[str, Dict[str, Any]]):
+class StreamProber():
     MINIMUM = 1800  # 30 minutes
     DEFAULT = 10800  # 3 hours
     MAXIMUM = 86400  # 1 day
@@ -24,97 +24,99 @@ class StreamProber(NamedCache[str, Dict[str, Any]]):
 
         @property
         def probe_score(self) -> int:
-            return self.__data["probe_score"]
+            return self.__data.get("probe_score", 0)
 
-    def __init__(self, timeout: float, lifetime: CacheTimeout,
-                 url: str, data: Optional[Dict[str, Any]] = None):
-        super().__init__(name=url, data=data or {}, lifetime=lifetime)
-        self.__format: StreamProber.Format = self.Format(self.data.get("format", {}))  # noqa:E501
-        self.__success: bool = data is not None
-        self.__timeout: float = timeout
+    def __init__(self, url: str, timeout: float):
+        self.__ffprobe: Optional[CacheAtom[Dict[str, Any]]] = None
+        self.__timeout: float = max(1.0, timeout)  # probe timeout
+        self.__lifetime: float = self.DEFAULT  # data lifetime
+        self.__success: bool = False
+        self.__url: str = url
+
+    def __str__(self) -> str:
+        return f"IPTV Stream Prober URL={self.url}"
 
     @property
-    def success(self) -> bool:
-        return self.__success
+    def url(self) -> str:
+        return self.__url
+
+    @property
+    def ffprobe(self) -> Dict[str, Any]:
+        if self.__ffprobe is None or self.__ffprobe.expired:
+            try:
+                data = ffprobe(self.url, timeout=int(self.__timeout * 1000000))
+                self.__ffprobe = CacheAtom(data=data, lifetime=self.__lifetime)
+                self.__success = True
+            except fferror:
+                self.__ffprobe = CacheAtom(data={}, lifetime=self.__lifetime)
+                self.__success = False
+            finally:
+                self.__timeout = min(self.__timeout if self.__success else self.__timeout + 0.5, 30.0)  # noqa:E501
+                self.__lifetime *= 1.15 if self.__success or self.__timeout >= 30 else 0.85  # noqa:E501
+        return self.__ffprobe.data
 
     @property
     def format(self) -> Format:
-        return self.__format
+        return self.Format(self.ffprobe.get("format", {}))
 
-    @property
-    def object(self) -> "StreamProber":
-        if not self.expired:
-            return self
 
-        def new_timeout(timeout: float) -> float:
-            return min(timeout if self.success else timeout + 1.0, 60.0)
+@singleton
+class StreamProberPool():
+    def __init__(self):
+        self.__probers: Dict[str, StreamProber] = {}
 
-        def new_lifetime(timeout: float, lifetime: float) -> float:
-            lifetime += 900 if self.success or timeout >= 30 else -lifetime / 4
-            return min(max(self.MINIMUM, lifetime), self.MAXIMUM)
+    def __len__(self) -> int:
+        return len(self.__probers)
 
-        timeout: float = new_timeout(self.__timeout)
-        return self.ffprobe(self.name, timeout, new_lifetime(timeout, self.life))  # noqa:E501
+    def __iter__(self) -> Iterator[StreamProber]:
+        return iter(self.__probers.values())
 
-    @classmethod
-    def ffprobe(cls, url: str, timeout: float, lifetime: CacheTimeout = DEFAULT) -> "StreamProber":  # noqa:E501
-        try:
-            data = ffprobe(url, timeout=int(timeout * 1000000))
-            return cls(timeout, lifetime, url, data)
-        except fferror:
-            return cls(timeout, lifetime, url)
+    def __getitem__(self, url: str) -> StreamProber:
+        return self.__probers[url]
+
+    def __contains__(self, url: str) -> bool:
+        return url in self.__probers
+
+    def alloc(self, url: str, timeout: float) -> StreamProber:
+        if url not in self.__probers:
+            self.__probers.setdefault(url, StreamProber(url, timeout))
+        return self.__probers[url]
+
+
+STREAMPROBERS: StreamProberPool = StreamProberPool()
 
 
 class IPTVStream():
 
-    def __init__(self, channel: IPTVChannel, timeout: float = 8.0):
-        self.__probe: Optional[StreamProber] = None
+    def __init__(self, channel: IPTVChannel, timeout: float = 3.0):
+        self.__prober: StreamProber = STREAMPROBERS.alloc(channel.url, timeout)
         self.__channel: IPTVChannel = channel
-        self.__timeout: float = timeout
+
+    def __str__(self) -> str:
+        return f"IPTVStream {self.name} URL={self.url}"
 
     @property
     def url(self) -> str:
-        return self.channel.url
+        return self.__channel.url
 
     @property
     def name(self) -> str:
-        return self.channel.name
+        return self.__channel.name
 
     @property
     def tvg_id(self) -> str:
-        return self.channel.attributes.get(IPTVAttr.TVG_ID.value, "")
+        return self.__channel.attributes.get(IPTVAttr.TVG_ID.value, "")
 
     @property
     def tvg_name(self) -> str:
-        return self.channel.attributes.get(IPTVAttr.TVG_NAME.value, "")
-
-    @property
-    def channel(self) -> IPTVChannel:
-        return self.__channel
-
-    @property
-    def timeout(self) -> float:
-        return self.__timeout
+        return self.__channel.attributes.get(IPTVAttr.TVG_NAME.value, "")
 
     @property
     def available(self) -> bool:
-        return self.probe.success
-
-    @property
-    def probe(self) -> StreamProber:
-        if self.__probe is None:
-            self.__probe = StreamProber.ffprobe(self.url, self.timeout)
-        self.__probe = self.__probe.object
-        return self.__probe
+        '''stream is available'''
+        return self.score >= 90
 
     @property
     def score(self) -> int:
         """probe score"""
-        return self.probe.format.probe_score
-
-    def request_head(self, timeout: Optional[float] = None) -> bool:
-        try:
-            response = requests.head(self.url, timeout=timeout or self.timeout)
-            return True if response.status_code == 200 else False
-        except requests.exceptions.RequestException:
-            return False
+        return self.__prober.format.probe_score
